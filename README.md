@@ -98,7 +98,7 @@ Filtros individuais: `tcp.port == 5000` (registro/resolução), `tcp.port == 600
 | Pacotes por requisição (Wireshark) | 11 | 2 |
 | Tempo médio por requisição (`benchmark.py -n 300`) | 7,8 ms | 1,5 ms |
 
-Prints da execução em [prints/terminal/](prints/terminal/) e da captura em [prints/wireshark/](prints/wireshark/). Análise completa em [RELATORIO.md](RELATORIO.md).
+Prints da execução em [prints/terminal/](prints/terminal/) e da captura em [prints/wireshark/](prints/wireshark/). A análise completa está no relatório entregue em PDF.
 
 ## Autor
 
