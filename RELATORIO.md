@@ -2,10 +2,10 @@
 
 **Disciplina:** CIN154 Redes de Computadores (UFPE, CIn)
 **Professor:** Kelvin Lopes Dias
-**Grupo:** _(nomes e logins)_
+**Grupo:** Pedro Siqueira de Barros
 **Repositório:** https://github.com/Peubarros1/Projeto-redes
 
-> Rascunho para passar ao template oficial (Word/PDF). Os trechos marcados com **[PREENCHER]** dependem da execução de vocês (prints, números do benchmark na sua máquina, seção de autoria).
+> Versão em Markdown do relatório. A versão final, com todas as imagens, é entregue em PDF/Word. Os prints estão na pasta [prints/](prints/).
 
 ---
 
@@ -43,41 +43,37 @@ Se um serviço subir antes do servidor de nomes, ele tenta se registrar de novo 
 
 ## 3. Prints do funcionamento
 
-### 3.1 Aplicação **[PREENCHER com prints]**
+### 3.1 Aplicação
 
-- Terminal do servidor de nomes mostrando os registros de `calc-tcp` e `calc-udp` e as resoluções.
-- Terminais dos servidores TCP e UDP mostrando as requisições atendidas.
-- Cliente TCP, por exemplo:
-  ```
-  [CLIENTE TCP] 'calc-tcp' resolvido para 127.0.0.1:6000 em 8.177 ms
-  [CLIENTE TCP] 'MUL 6 7' -> 'RESULT 42' | conexao 0.898 ms | total da requisicao 1.846 ms
-  ```
-- Cliente UDP, por exemplo:
-  ```
-  [CLIENTE UDP] 'calc-udp' resolvido para 127.0.0.1:6001 em 5.000 ms
-  [CLIENTE UDP] 'DIV 10 4' -> 'RESULT 2.5' | total da requisicao 1.110 ms
-  ```
-- Serviço inexistente (prova de tratamento de erro):
-  ```
-  [CLIENTE] Solicitando ao servidor de nomes a resolucao de 'servico-fantasma'...
-  [CLIENTE] O servico 'servico-fantasma' NAO esta registrado. Verifique o nome ou se o servidor do servico foi iniciado.
-  [CLIENTE] Encerrando normalmente (erro tratado).
-  ```
-  No log do servidor de nomes aparece `resolucao de 'servico-fantasma': NAO ENCONTRADO`. O cliente termina com código 0, sem exceção e sem travar.
+Prints em [prints/terminal/](prints/terminal/). Horários dos logs: servidor de nomes às 23:16:43, `calc-tcp` registrado às 23:16:55, `calc-udp` às 23:17:06 e clientes a partir de 23:17:17.
 
-### 3.2 Wireshark **[PREENCHER com prints]**
+| Print | O que mostra |
+|---|---|
+| [01_servidor_de_nomes](prints/terminal/01_servidor_de_nomes.png) | Registros de `calc-tcp` e `calc-udp`, resoluções dos clientes e `servico-fantasma` como NAO ENCONTRADO; uma thread por conexão (Thread-1 a Thread-5) |
+| [02_servidor_tcp](prints/terminal/02_servidor_tcp.png) | Registro de `calc-tcp` e a requisição `MUL 6 7` → `RESULT 42` vinda da porta 56556 |
+| [03_servidor_udp](prints/terminal/03_servidor_udp.png) | Requisição `DIV 10 4` → `RESULT 2.5` vinda da porta 61347 |
+| [04_cliente_tcp](prints/terminal/04_cliente_tcp.png) | Resolução em 4,3 ms, `RESULT 42`, requisição de 21,4 ms (21,0 ms abrindo a primeira conexão) |
+| [05_cliente_udp](prints/terminal/05_cliente_udp.png) | Resolução em 21,6 ms, `RESULT 2.5`, requisição de 1,2 ms |
+| [06_servico_inexistente](prints/terminal/06_servico_inexistente.png) | Mensagem de serviço não registrado e encerramento normal (erro tratado) |
 
-Captura na interface de loopback (Npcap *Adapter for loopback traffic capture*) com o filtro
-`tcp.port == 5000 || tcp.port == 6000 || udp.port == 6001`. Sugestão de prints e do que comentar em cada um:
+### 3.2 Wireshark
 
-| Print | Filtro | O que deve aparecer / comentar |
+Captura na interface de loopback (Npcap *Adapter for loopback traffic capture*) com o filtro `tcp.port == 5000 || tcp.port == 6000 || udp.port == 6001`. Prints em [prints/wireshark/](prints/wireshark/).
+
+| Figura | Filtro | O que mostra |
 |---|---|---|
-| Registro dos serviços | `tcp.port == 5000` | Handshake de 3 vias (SYN, SYN-ACK, ACK) entre uma porta efêmera e a 5000; segmento PSH com `REGISTER calc-tcp 127.0.0.1 6000`; resposta `OK`; encerramento com FIN/ACK. Cerca de 9 a 10 pacotes por registro. |
-| Resolução de nome | `tcp.port == 5000` | Mesma estrutura: `RESOLVE calc-tcp` → `FOUND 127.0.0.1 6000`. Para o serviço inexistente: `RESOLVE servico-fantasma` → `NOT_FOUND servico-fantasma`. |
-| Requisição TCP | `tcp.port == 6000` | Handshake + `MUL 6 7` + `RESULT 42` + ACKs + FIN. Cerca de 9 a 10 pacotes para trocar uma pergunta e uma resposta. |
-| Requisição UDP | `udp.port == 6001` | Só **2 pacotes**: o datagrama `DIV 10 4` e o datagrama `RESULT 2.5`. Sem handshake, sem ACK, sem encerramento. |
+| [1](prints/wireshark/01_registro_e_resolucao_porta5000.png) | `tcp.port == 5000` | Pacotes 197–207: registro de `calc-tcp` (SYN, SYN-ACK, ACK, `REGISTER` com 33 bytes, `OK` com 3 bytes, FIN/ACK), 11 pacotes. 238–248: o mesmo para `calc-udp`, também via TCP. 267–276: `RESOLVE calc-tcp` (17 bytes) → `FOUND 127.0.0.1 6000` (21 bytes) |
+| [2](prints/wireshark/02_visao_geral_filtro_completo.png) | completo | 282–288: fim da requisição TCP. 294–304: cliente UDP resolve `calc-udp`. 305–306: os 2 datagramas UDP. 315–325: `RESOLVE servico-fantasma` → `NOT_FOUND servico-fantasma` |
+| [3](prints/wireshark/03_requisicao_tcp_porta6000.png) | `tcp.port == 6000` | 11 pacotes: handshake (278–280), `MUL 6 7` com 8 bytes (281), ACK, `RESULT 42` com 10 bytes (283), ACK, encerramento (285–288). Só 2 dos 11 carregam dados |
+| [4](prints/wireshark/04_requisicao_udp_porta6001.png) | `udp.port == 6001` | Só 2 pacotes: `DIV 10 4` (9 bytes) e `RESULT 2.5` (11 bytes). O pacote tem 41 bytes para 9 de dados (cabeçalho UDP de 8 bytes), contra 52 para 8 de dados no TCP (cabeçalho de 20 bytes) |
+| [5](prints/wireshark/05_seguir_fluxo_tcp.png) | Seguir → Fluxo TCP | O texto trocado: `MUL 6 7` (cliente) e `RESULT 42` (servidor) |
 
-Diferenças a destacar: no TCP a troca de dados vem depois do estabelecimento da conexão e cada segmento é confirmado (ACK), com números de sequência; no UDP cada mensagem vai sozinha em um datagrama, com cabeçalho de 8 bytes (contra 20+ do TCP), sem confirmação nem garantia de entrega. É por isso que o cliente UDP implementa timeout e retransmissão.
+| Requisição | Pacotes | Pacotes com dados | Cabeçalho de transporte |
+|---|---|---|---|
+| TCP | 11 | 2 | 20 bytes |
+| UDP | 2 | 2 | 8 bytes |
+
+No TCP a troca de dados vem depois do estabelecimento da conexão, cada segmento é confirmado (ACK) e a conexão termina com FIN. No UDP cada mensagem vai sozinha em um datagrama, sem confirmação nem garantia de entrega; por isso o cliente UDP implementa timeout e retransmissão.
 
 ## 4. Linha de raciocínio resolutiva
 
@@ -115,7 +111,7 @@ Erros tratados: entrada inválida no registro (ip, porta, número de argumentos)
 
 ## 6. Resultado: comparação TCP x UDP
 
-Medição com `python benchmark.py -n 300` (300 amostras por medida, 10 de aquecimento descartadas, requisição `MUL 12345 6789`, tudo em loopback 127.0.0.1, Windows 11, Python 3.14). **[PREENCHER: rodar de novo na máquina de vocês e substituir os números]**
+Medição com `python benchmark.py -n 300` (300 amostras por medida, 10 de aquecimento descartadas, requisição `MUL 12345 6789`, tudo em loopback 127.0.0.1, Windows 11, Python 3.14). 
 
 | Medida | Média (ms) | Mediana (ms) | Mín (ms) | Máx (ms) | p95 (ms) |
 |---|---|---|---|---|---|
