@@ -90,3 +90,16 @@ tcp.port == 5000 || tcp.port == 6000 || udp.port == 6001
 ```
 
 Filtros individuais: `tcp.port == 5000` (registro/resolução), `tcp.port == 6000` (serviço TCP), `udp.port == 6001` (serviço UDP).
+
+## Resultados
+
+| | TCP | UDP |
+|---|---|---|
+| Pacotes por requisição (Wireshark) | 11 | 2 |
+| Tempo médio por requisição (`benchmark.py -n 300`) | 7,8 ms | 1,5 ms |
+
+Prints da execução em [prints/terminal/](prints/terminal/) e da captura em [prints/wireshark/](prints/wireshark/). Análise completa em [RELATORIO.md](RELATORIO.md).
+
+## Autor
+
+Pedro Siqueira de Barros
