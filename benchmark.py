@@ -1,86 +1,73 @@
-"""
-Benchmark TCP x UDP para o relatório.
-
-Resolve os dois serviços no servidor de nomes, executa N requisições em cada um
-e mostra estatísticas (média, mediana, mín, máx, desvio, p95). Salva as amostras em
-results/benchmark.csv para gerar gráficos/tabelas no relatório.
-
-Uso:
-  python benchmark.py          # 200 requisições por protocolo
-  python benchmark.py -n 1000
-"""
-
 import argparse
 import csv
 import os
 import statistics
 import time
 
-from common import TCP_SERVICE_NAME, UDP_SERVICE_NAME, resolve
+from common import NOME_SERVICO_TCP, NOME_SERVICO_UDP, resolve
 from tcp_client import tcp_request
 from udp_client import udp_request
 
-REQUEST = "MUL 12345 6789"
+REQUISICAO = "MUL 12345 6789"
 
 
-def summarize(label, samples):
-    ordered = sorted(samples)
-    p95 = ordered[int(0.95 * (len(ordered) - 1))]
-    print(f"{label:<22} media {statistics.mean(samples):8.3f} | mediana {statistics.median(samples):8.3f} | "
-          f"min {min(samples):8.3f} | max {max(samples):8.3f} | "
-          f"desvio {statistics.stdev(samples):7.3f} | p95 {p95:8.3f}  (ms)")
+def summarize(rotulo, amostras):
+    ordenadas = sorted(amostras)
+    p95 = ordenadas[int(0.95 * (len(ordenadas) - 1))]
+    print(f"{rotulo:<22} media {statistics.mean(amostras):8.3f} | mediana {statistics.median(amostras):8.3f} | "
+          f"min {min(amostras):8.3f} | max {max(amostras):8.3f} | "
+          f"desvio {statistics.stdev(amostras):7.3f} | p95 {p95:8.3f}  (ms)")
 
 
-def timed_resolve(name, n):
-    samples = []
+def timed_resolve(nome, n):
+    amostras = []
     for _ in range(n):
-        t0 = time.perf_counter()
-        addr = resolve(name)
-        samples.append((time.perf_counter() - t0) * 1000)
-    if addr is None:
-        raise SystemExit(f"servico '{name}' nao registrado - suba os servidores antes")
-    return addr, samples
+        inicio = time.perf_counter()
+        endereco = resolve(nome)
+        amostras.append((time.perf_counter() - inicio) * 1000)
+    if endereco is None:
+        raise SystemExit(f"servico '{nome}' nao registrado - suba os servidores antes")
+    return endereco, amostras
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-n", type=int, default=200, help="requisicoes por protocolo")
-    parser.add_argument("--warmup", type=int, default=10, help="requisicoes de aquecimento descartadas")
-    args = parser.parse_args()
+    analisador = argparse.ArgumentParser()
+    analisador.add_argument("-n", type=int, default=200, help="requisicoes por protocolo")
+    analisador.add_argument("--warmup", type=int, default=10, help="requisicoes de aquecimento descartadas")
+    argumentos = analisador.parse_args()
 
-    (tcp_ip, tcp_port), res_tcp = timed_resolve(TCP_SERVICE_NAME, args.n)
-    (udp_ip, udp_port), res_udp = timed_resolve(UDP_SERVICE_NAME, args.n)
+    (ip_tcp, porta_tcp), resolucao_tcp = timed_resolve(NOME_SERVICO_TCP, argumentos.n)
+    (ip_udp, porta_udp), resolucao_udp = timed_resolve(NOME_SERVICO_UDP, argumentos.n)
 
-    for _ in range(args.warmup):
-        tcp_request(tcp_ip, tcp_port, REQUEST)
-        udp_request(udp_ip, udp_port, REQUEST)
+    for _ in range(argumentos.warmup):
+        tcp_request(ip_tcp, porta_tcp, REQUISICAO)
+        udp_request(ip_udp, porta_udp, REQUISICAO)
 
-    tcp_conn, tcp_total, udp_total = [], [], []
-    # Intercala TCP e UDP para que variações de carga da máquina afetem os dois igualmente
-    for _ in range(args.n):
-        _, c, t = tcp_request(tcp_ip, tcp_port, REQUEST)
-        tcp_conn.append(c)
-        tcp_total.append(t)
-        _, t, _ = udp_request(udp_ip, udp_port, REQUEST)
-        udp_total.append(t)
+    conexoes_tcp, totais_tcp, totais_udp = [], [], []
+    for _ in range(argumentos.n):
+        _, tempo_conexao, tempo = tcp_request(ip_tcp, porta_tcp, REQUISICAO)
+        conexoes_tcp.append(tempo_conexao)
+        totais_tcp.append(tempo)
+        _, tempo, _ = udp_request(ip_udp, porta_udp, REQUISICAO)
+        totais_udp.append(tempo)
 
-    print(f"\nRequisicao: '{REQUEST}'  |  {args.n} amostras por medida  |  {args.warmup} de aquecimento\n")
-    summarize("Resolucao de nome", res_tcp + res_udp)
-    summarize("TCP (so handshake)", tcp_conn)
-    summarize("TCP (requisicao)", tcp_total)
-    summarize("UDP (requisicao)", udp_total)
-    ratio = statistics.mean(tcp_total) / statistics.mean(udp_total)
-    print(f"\nTCP foi em media {ratio:.2f}x o tempo do UDP por requisicao.")
+    print(f"\nRequisicao: '{REQUISICAO}'  |  {argumentos.n} amostras por medida  |  {argumentos.warmup} de aquecimento\n")
+    summarize("Resolucao de nome", resolucao_tcp + resolucao_udp)
+    summarize("TCP (so handshake)", conexoes_tcp)
+    summarize("TCP (requisicao)", totais_tcp)
+    summarize("UDP (requisicao)", totais_udp)
+    razao = statistics.mean(totais_tcp) / statistics.mean(totais_udp)
+    print(f"\nTCP foi em media {razao:.2f}x o tempo do UDP por requisicao.")
 
     os.makedirs("results", exist_ok=True)
-    path = os.path.join("results", "benchmark.csv")
-    with open(path, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["amostra", "resolucao_ms", "tcp_conexao_ms", "tcp_total_ms", "udp_total_ms"])
-        for i in range(args.n):
-            w.writerow([i + 1, f"{res_tcp[i]:.4f}", f"{tcp_conn[i]:.4f}",
-                        f"{tcp_total[i]:.4f}", f"{udp_total[i]:.4f}"])
-    print(f"Amostras salvas em {path}")
+    caminho = os.path.join("results", "benchmark.csv")
+    with open(caminho, "w", newline="") as arquivo:
+        escritor = csv.writer(arquivo)
+        escritor.writerow(["amostra", "resolucao_ms", "tcp_conexao_ms", "tcp_total_ms", "udp_total_ms"])
+        for i in range(argumentos.n):
+            escritor.writerow([i + 1, f"{resolucao_tcp[i]:.4f}", f"{conexoes_tcp[i]:.4f}",
+                               f"{totais_tcp[i]:.4f}", f"{totais_udp[i]:.4f}"])
+    print(f"Amostras salvas em {caminho}")
 
 
 if __name__ == "__main__":

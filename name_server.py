@@ -1,108 +1,99 @@
-"""
-Servidor de nomes (serviço de diretório).
-
-Mantém em memória a tabela  nome do serviço -> (ip, porta).
-Escuta em endereço/porta fixos via TCP e trata cada conexão em uma thread separada,
-para que um cliente lento não bloqueie novos registros/resoluções.
-"""
-
 import ipaddress
 import socket
 import threading
 from datetime import datetime
 
-from common import NAME_SERVER_HOST, NAME_SERVER_PORT, LineReader, send_line
+from common import IP_SERVIDOR_NOMES, PORTA_SERVIDOR_NOMES, LineReader, send_line
 
-registry = {}                     # nome -> (ip, porta)
-registry_lock = threading.Lock()  # protege a tabela contra acesso concorrente das threads
-
-
-def log(msg: str) -> None:
-    print(f"[{datetime.now():%H:%M:%S}] [NOMES] {msg}", flush=True)
+tabela_servicos = {}
+trava_tabela = threading.Lock()
 
 
-def handle_register(args):
-    if len(args) != 3:
+def log(mensagem: str) -> None:
+    print(f"[{datetime.now():%H:%M:%S}] [NOMES] {mensagem}", flush=True)
+
+
+def handle_register(argumentos):
+    if len(argumentos) != 3:
         return "ERROR uso: REGISTER <nome> <ip> <porta>"
-    name, ip, port_txt = args
+    nome, ip, texto_porta = argumentos
     try:
         ipaddress.ip_address(ip)
     except ValueError:
         return f"ERROR ip invalido: {ip}"
-    if not port_txt.isdigit() or not (1 <= int(port_txt) <= 65535):
-        return f"ERROR porta invalida: {port_txt}"
+    if not texto_porta.isdigit() or not (1 <= int(texto_porta) <= 65535):
+        return f"ERROR porta invalida: {texto_porta}"
 
-    with registry_lock:
-        action = "atualizado" if name in registry else "registrado"
-        registry[name] = (ip, int(port_txt))
-    log(f"servico '{name}' {action} -> {ip}:{port_txt}")
+    with trava_tabela:
+        acao = "atualizado" if nome in tabela_servicos else "registrado"
+        tabela_servicos[nome] = (ip, int(texto_porta))
+    log(f"servico '{nome}' {acao} -> {ip}:{texto_porta}")
     return "OK"
 
 
-def handle_resolve(args):
-    if len(args) != 1:
+def handle_resolve(argumentos):
+    if len(argumentos) != 1:
         return "ERROR uso: RESOLVE <nome>"
-    name = args[0]
-    with registry_lock:
-        entry = registry.get(name)
-    if entry is None:
-        log(f"resolucao de '{name}': NAO ENCONTRADO")
-        return f"NOT_FOUND {name}"
-    log(f"resolucao de '{name}' -> {entry[0]}:{entry[1]}")
-    return f"FOUND {entry[0]} {entry[1]}"
+    nome = argumentos[0]
+    with trava_tabela:
+        registro = tabela_servicos.get(nome)
+    if registro is None:
+        log(f"resolucao de '{nome}': NAO ENCONTRADO")
+        return f"NOT_FOUND {nome}"
+    log(f"resolucao de '{nome}' -> {registro[0]}:{registro[1]}")
+    return f"FOUND {registro[0]} {registro[1]}"
 
 
-def handle_list(args):
-    with registry_lock:
-        items = " ".join(f"{n}={ip}:{p}" for n, (ip, p) in registry.items())
-    return f"SERVICES {items}".strip()
+def handle_list(argumentos):
+    with trava_tabela:
+        itens = " ".join(f"{n}={ip}:{p}" for n, (ip, p) in tabela_servicos.items())
+    return f"SERVICES {itens}".strip()
 
 
-COMMANDS = {
+COMANDOS = {
     "REGISTER": handle_register,
     "RESOLVE": handle_resolve,
     "LIST": handle_list,
 }
 
 
-def handle_client(conn: socket.socket, addr) -> None:
-    """Executada em uma thread por conexão. Aceita vários comandos na mesma conexão."""
-    log(f"conexao de {addr[0]}:{addr[1]} ({threading.current_thread().name})")
-    reader = LineReader(conn)
+def handle_client(conexao: socket.socket, endereco) -> None:
+    log(f"conexao de {endereco[0]}:{endereco[1]} ({threading.current_thread().name})")
+    leitor = LineReader(conexao)
     try:
-        with conn:
+        with conexao:
             while True:
-                line = reader.readline()
-                if line is None:          # cliente fechou a conexão
+                linha = leitor.readline()
+                if linha is None:
                     break
-                if not line:
+                if not linha:
                     continue
-                parts = line.split()
-                handler = COMMANDS.get(parts[0].upper())
-                reply = handler(parts[1:]) if handler else f"ERROR comando desconhecido: {parts[0]}"
-                send_line(conn, reply)
-    except (ConnectionError, OSError) as exc:
-        log(f"erro na conexao com {addr}: {exc}")
+                partes = linha.split()
+                tratador = COMANDOS.get(partes[0].upper())
+                resposta = tratador(partes[1:]) if tratador else f"ERROR comando desconhecido: {partes[0]}"
+                send_line(conexao, resposta)
+    except (ConnectionError, OSError) as erro:
+        log(f"erro na conexao com {endereco}: {erro}")
 
 
 def main() -> None:
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((NAME_SERVER_HOST, NAME_SERVER_PORT))
-    server.listen()
-    server.settimeout(1.0)  # permite que Ctrl+C seja percebido no Windows
-    log(f"escutando em {NAME_SERVER_HOST}:{NAME_SERVER_PORT} (TCP)")
+    servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    servidor.bind((IP_SERVIDOR_NOMES, PORTA_SERVIDOR_NOMES))
+    servidor.listen()
+    servidor.settimeout(1.0)
+    log(f"escutando em {IP_SERVIDOR_NOMES}:{PORTA_SERVIDOR_NOMES} (TCP)")
     try:
         while True:
             try:
-                conn, addr = server.accept()
+                conexao, endereco = servidor.accept()
             except socket.timeout:
                 continue
-            threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
+            threading.Thread(target=handle_client, args=(conexao, endereco), daemon=True).start()
     except KeyboardInterrupt:
         log("encerrando")
     finally:
-        server.close()
+        servidor.close()
 
 
 if __name__ == "__main__":

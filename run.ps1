@@ -1,10 +1,4 @@
-# Equivalente ao Makefile para Windows (PowerShell), onde o "make" normalmente não existe.
-# Uso:
-#   .\run.ps1 servers    -> abre 3 janelas: servidor de nomes, depois TCP e UDP
-#   .\run.ps1 clients    -> roda cliente TCP, cliente UDP e cliente do serviço inexistente
-#   .\run.ps1 benchmark  -> compara tempos TCP x UDP (salva results\benchmark.csv)
-#   .\run.ps1 all        -> servers + clients
-param([string]$target = "all")
+param([string]$alvo = "all")
 
 function Start-Servers {
     Write-Host "1) Subindo servidor de nomes..."
@@ -23,7 +17,7 @@ function Start-Clients {
     Write-Host "`n--- Cliente servico inexistente ---"; python missing_client.py servico-fantasma
 }
 
-switch ($target) {
+switch ($alvo) {
     "servers"   { Start-Servers }
     "clients"   { Start-Clients }
     "benchmark" { Set-Location $PSScriptRoot; python benchmark.py -n 300 }

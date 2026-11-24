@@ -1,11 +1,3 @@
-# Ordem obrigatória: 1) servidor de nomes  2) servidores TCP e UDP  3) clientes
-# Rode cada servidor em um terminal próprio e deixe-os no ar:
-#   terminal 1: make name-server
-#   terminal 2: make tcp-server
-#   terminal 3: make udp-server
-#   terminal 4: make clients   (ou make tcp-client / udp-client / missing-client / benchmark)
-# No Linux/macOS (ou Git Bash), "make up" sobe os três servidores em segundo plano.
-
 PYTHON ?= python
 
 .PHONY: name-server tcp-server udp-server up down clients tcp-client udp-client missing-client benchmark

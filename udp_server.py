@@ -1,57 +1,47 @@
-"""
-Serviço de aplicação via UDP (calculadora).
-
-Mesma lógica do serviço TCP, mas sem conexão: cada datagrama recebido é uma
-requisição completa e a resposta vai em um datagrama para o endereço de origem.
-Cada datagrama é processado em uma thread, para não bloquear o recebimento de outros.
-O registro no servidor de nomes é feito via TCP (decisão do grupo).
-"""
-
 import socket
 import sys
 import threading
 from datetime import datetime
 
-from common import (BUFFER_SIZE, ENCODING, UDP_SERVICE_HOST, UDP_SERVICE_NAME,
-                    UDP_SERVICE_PORT, calculate)
+from common import (TAMANHO_BUFFER, CODIFICACAO, IP_SERVICO_UDP, NOME_SERVICO_UDP,
+                    PORTA_SERVICO_UDP, calculate)
 from registration import register_service
 
 
-def log(msg: str) -> None:
-    print(f"[{datetime.now():%H:%M:%S}] [UDP] {msg}", flush=True)
+def log(mensagem: str) -> None:
+    print(f"[{datetime.now():%H:%M:%S}] [UDP] {mensagem}", flush=True)
 
 
-def handle_datagram(sock: socket.socket, data: bytes, addr) -> None:
-    request = data.decode(ENCODING, errors="replace").strip()
-    reply = calculate(request)
-    sock.sendto((reply + "\n").encode(ENCODING), addr)
-    log(f"{addr[0]}:{addr[1]} '{request}' -> '{reply}'")
+def handle_datagram(soquete: socket.socket, dados: bytes, endereco) -> None:
+    requisicao = dados.decode(CODIFICACAO, errors="replace").strip()
+    resposta = calculate(requisicao)
+    soquete.sendto((resposta + "\n").encode(CODIFICACAO), endereco)
+    log(f"{endereco[0]}:{endereco[1]} '{requisicao}' -> '{resposta}'")
 
 
 def main() -> None:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((UDP_SERVICE_HOST, UDP_SERVICE_PORT))
-    sock.settimeout(1.0)
-    log(f"escutando em {UDP_SERVICE_HOST}:{UDP_SERVICE_PORT}")
+    soquete = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    soquete.bind((IP_SERVICO_UDP, PORTA_SERVICO_UDP))
+    soquete.settimeout(1.0)
+    log(f"escutando em {IP_SERVICO_UDP}:{PORTA_SERVICO_UDP}")
 
-    if not register_service(UDP_SERVICE_NAME, UDP_SERVICE_HOST, UDP_SERVICE_PORT, log):
-        sock.close()
+    if not register_service(NOME_SERVICO_UDP, IP_SERVICO_UDP, PORTA_SERVICO_UDP, log):
+        soquete.close()
         sys.exit(1)
 
     try:
         while True:
             try:
-                data, addr = sock.recvfrom(BUFFER_SIZE)
+                dados, endereco = soquete.recvfrom(TAMANHO_BUFFER)
             except socket.timeout:
                 continue
             except ConnectionResetError:
-                # No Windows, um ICMP "port unreachable" de um envio anterior aparece aqui; ignoramos.
                 continue
-            threading.Thread(target=handle_datagram, args=(sock, data, addr), daemon=True).start()
+            threading.Thread(target=handle_datagram, args=(soquete, dados, endereco), daemon=True).start()
     except KeyboardInterrupt:
         log("encerrando")
     finally:
-        sock.close()
+        soquete.close()
 
 
 if __name__ == "__main__":
